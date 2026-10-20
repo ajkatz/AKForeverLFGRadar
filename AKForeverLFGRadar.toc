@@ -1,0 +1,17 @@
+## Interface: 16001
+## Version: @project-version@
+## Title: AKForeverLFGRadar
+## Notes: Pick a dungeon and see how far you are from its door - in yards, by zone, inside, another continent - and the same for everyone running the addon, who tell each other where they are; the group finder's listings for it, sorted by proximity and role.
+## Author: Purrdee
+## X-License: MIT
+## IconTexture: Interface\AddOns\AKForeverLFGRadar\icon
+## SavedVariables: AKForeverLFGRadarDB
+
+Core.lua
+Dungeons.lua
+Position.lua
+Net.lua
+LFG.lua
+Lookup.lua
+Panel.lua
+Diagnostics.lua
