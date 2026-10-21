@@ -490,13 +490,19 @@ scenario("the group finder: people and groups listed for the picked dungeon come
     Mock.openLFG({ 1001, 1003 })
     Mock.advance(1.5)
     equal(ns.Dungeons:Picked().key, "36", "two dungeons in the filter: the pick stays")
-    -- Refresh with the Browse tab open is the finder's own refresh; with the finder closed, a search of ours
+    -- Refresh with the Browse tab open: a search of ours with the finder's own filter - its own button is never
+    -- clicked (from an addon its search ran tainted and was blocked, 2026-10-20); with the finder closed, ours too
     local searches, refreshes = #Mock.lfgSearches, Mock.finderRefreshes
     check(AKForeverLFGRadarRefresh:IsEnabled(), "Refresh is live with the finder open")
     Mock.click(AKForeverLFGRadarRefresh)
-    equal(Mock.finderRefreshes, refreshes + 1, "the finder's own refresh button was clicked")
-    equal(#Mock.lfgSearches, searches + 1, "which searched with the finder's own filter")
-    equal(#Mock.lfgSearches[#Mock.lfgSearches].activityIDs, 2, "the filter as it stands, both dungeons")
+    equal(Mock.finderRefreshes, refreshes, "the finder's own refresh button is never clicked")
+    equal(#Mock.lfgSearches, searches + 1, "a search of ours ...")
+    equal(#Mock.lfgSearches[#Mock.lfgSearches].activityIDs, 2, "... with the filter as it stands, both dungeons")
+    equal(Mock.lfgSearches[#Mock.lfgSearches].categoryID, 2, "in the finder's category")
+    LFGBrowseFrame.ActivityDropdown.selectedValues = {}
+    Mock.click(AKForeverLFGRadarRefresh)
+    equal(#Mock.lfgSearches[#Mock.lfgSearches].activityIDs, #LFGUtil_GetFilteredActivities(2), "nothing selected: the whole category, as the finder does")
+    LFGBrowseFrame.ActivityDropdown.selectedValues = { 1001, 1003 }
     -- the X beside the finder: away until the finder is opened again
     Mock.click(AKForeverLFGRadarClose)
     check(not panel():IsShown(), "closed")

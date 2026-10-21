@@ -55,9 +55,10 @@ into it:
 - **The panel docks** beside the finder window: it appears with the finder and closes with it. The X closes
   it until the finder is opened again. `/dr show` keeps it on screen on its own, `/dr dock off` leaves it
   where you put it.
-- **Refresh** clicks the finder's own refresh while its Browse tab is open; with the finder closed it runs a
-  search of its own for the picked dungeon (a click, as the client demands of that search). Blizzard's own
-  list is never re-ordered.
+- **Refresh** runs a search of its own (a click, as the client demands of that search): while the finder's
+  Browse tab is open, for the finder's own filter as it stands - read, never written - and with the finder
+  closed, for the picked dungeon. The finder's own refresh button is never clicked (clicked from an addon,
+  its search is blocked by the client), and Blizzard's own list is never re-ordered.
 - **The dungeon list is the finder's.** Its activity table names every instance of this realm - Forever's own
   included - by the instance's map id, with the finder's own suggested level range and size. Raids are left
   out: the radar is for five-man groups. An instance the finder lists in wings - the Monastery's four, Dire

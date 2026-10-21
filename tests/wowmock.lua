@@ -408,6 +408,17 @@ function Mock.install(options)
     -- the playstyle every listing is posted with, worded by the client (Blizzard_LFGUtil's helper)
     G.Enum.LFGEntryGeneralPlaystyle = { None = 0, Learning = 1, FunRelaxed = 2, FunSerious = 3, Expert = 4 }
     G.GetGeneralPlaystyleString = function(value) return ({ "Learning", "Relaxed", "Serious", "Expert" })[value] or "" end
+    -- every activity of a category, as the finder's own search takes when nothing is selected
+    G.LFGUtil_GetFilteredActivities = function(categoryID)
+        local ids = {}
+        for id, activity in pairs(state.lfg.activities) do
+            if activity.categoryID == categoryID then
+                ids[#ids + 1] = id
+            end
+        end
+        table.sort(ids)
+        return ids
+    end
     G.C_LFGList = {
         GetAvailableCategories = function() return { 2, 114 } end,
         GetLfgCategoryInfo = function(id) return (id == 2 or id == 114) and { name = id == 2 and "Dungeons" or "Raids" } or nil end,
@@ -631,6 +642,7 @@ function Mock.openLFG(activityIDs)
         parent.ListingTab = tab
         local browse = G.CreateFrame("Frame", "LFGBrowseFrame", parent)
         browse.ActivityDropdown = { selectedValues = {} }
+        browse.CategoryDropdown = { selectedCategoryID = 2 } -- (LFGBrowseCategoryDropdownMixin:GetValue reads this field)
         browse.searching = false
         -- the finder's own way of showing a search for given activities (LFGBrowseMixin:SetSelectedSearchActivities,
         -- forever branch): the dropdown set, then its own search - C_LFGList.Search, hardware-gated

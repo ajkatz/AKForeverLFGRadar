@@ -15,10 +15,12 @@
 --     1 in Elwynn Forest"), ranked by their average. Sorted by proximity, then by role (tank, healer, dps),
 --     then by name - on the radar panel, which docks to the finder window while it is open. Blizzard's own
 --     list is not re-ordered: it is theirs.
---   * REFRESH. With the finder's Browse tab open, the Refresh button clicks the finder's own refresh button;
---     with it closed, a search of our own for the picked dungeon's activities (C_LFGList.Search is restricted
---     to a key press or a click, as the finder's button is). Ours never runs while the tab is open: it would
---     only replace what the player is looking at.
+--   * REFRESH. A search of our own, from the click (C_LFGList.Search is restricted to a key press or a click):
+--     with the finder's Browse tab open, for the finder's own filter as it stands - read, never written: the
+--     very search its own Refresh runs - and with it closed, for the picked dungeon's activities. The finder's
+--     own Refresh button is never clicked: clicked from an addon, its search ran tainted and the client blocked
+--     it ("Interface action failed because of an AddOn"; the saved log of 2026-10-20: finder_refresh, then
+--     ADDON_ACTION_BLOCKED).
 local _, ns = ...
 
 local LFG = {}
@@ -415,8 +417,26 @@ function LFG:BrowseOpen()
     return type(browse) == "table" and browse.IsShown ~= nil and (ns.Readable(browse.IsShown, browse) or {})[1] == true
 end
 
--- Our own search, from a click or a slash command only (C_LFGList.Search is restricted). Not while the
--- Browse tab is open: its search stands.
+-- One search of ours for these activities, from a click or a slash command only (C_LFGList.Search is
+-- restricted). `key` names what it was for in the log.
+function LFG:SearchActivities(activities, key)
+    local list = api()
+    if not list or type(list.Search) ~= "function" then
+        return false, "this client has no group finder API"
+    end
+    local ok, err = pcall(list.Search, activities.categoryID, 0, 0, nil, false, nil, activities.ids)
+    if not ok then
+        self.stats.refused = self.stats.refused + 1
+        ns:Log("lfg_search_refused", tostring(err))
+        return false, "the client refused the search: " .. tostring(err)
+    end
+    self.stats.searches = self.stats.searches + 1
+    self.stats.lastSearchAt = GetTime()
+    ns:Log("lfg_search", { key = key, activities = #activities.ids })
+    return true
+end
+
+-- Our own search for the picked dungeon.
 function LFG:Search()
     local list = api()
     local dungeon = ns.Dungeons:Picked()
@@ -430,16 +450,40 @@ function LFG:Search()
     if not activities or #activities.ids == 0 then
         return false, "the finder has no activity for " .. dungeon.name
     end
-    local ok, err = pcall(list.Search, activities.categoryID, 0, 0, nil, false, nil, activities.ids)
-    if not ok then
-        self.stats.refused = self.stats.refused + 1
-        ns:Log("lfg_search_refused", tostring(err))
-        return false, "the client refused the search: " .. tostring(err)
+    return self:SearchActivities(activities, dungeon.key)
+end
+
+-- The Browse tab's own filter, READ (never written): its category and its selected activities - every
+-- activity of the category when none is selected, as the finder's own search does (LFGBrowse_DoSearch,
+-- forever branch). Copies: nothing of the finder's is handed back to the client.
+local function browseFilter()
+    local browse = _G.LFGBrowseFrame
+    if type(browse) ~= "table" then
+        return nil
     end
-    self.stats.searches = self.stats.searches + 1
-    self.stats.lastSearchAt = GetTime()
-    ns:Log("lfg_search", { key = dungeon.key, activities = #activities.ids })
-    return true
+    local category = browse.CategoryDropdown
+    local categoryID = type(category) == "table" and category.selectedCategoryID or nil
+    if ns.IsSecret(categoryID) or type(categoryID) ~= "number" or categoryID <= 0 then
+        return nil
+    end
+    local ids = {}
+    local function take(list)
+        for _, id in ipairs(type(list) == "table" and list or {}) do
+            if not ns.IsSecret(id) and type(id) == "number" then
+                ids[#ids + 1] = id
+            end
+        end
+    end
+    local dropdown = browse.ActivityDropdown
+    take(type(dropdown) == "table" and dropdown.selectedValues or nil)
+    if #ids == 0 and type(LFGUtil_GetFilteredActivities) == "function" then
+        local ok, all = pcall(LFGUtil_GetFilteredActivities, categoryID)
+        take(ok and all or nil)
+    end
+    if #ids == 0 then
+        return nil
+    end
+    return { categoryID = categoryID, ids = ids }
 end
 
 -- A pick from the panel's dropdown or a command searches for it at once - A SEARCH OF OURS
@@ -460,22 +504,20 @@ function LFG:SearchFinder(dungeon, how)
     return false, why
 end
 
--- The Refresh button: the finder's own refresh while its Browse tab is open, a search of ours otherwise.
--- From a click or a slash command only.
+-- The Refresh button: a search of ours, from a click or a slash command only - with the Browse tab open,
+-- for the finder's own filter as it stands (the search its own Refresh runs, without its button), otherwise
+-- for the picked dungeon.
 function LFG:Refresh()
     if self:BrowseOpen() then
-        local browse = _G.LFGBrowseFrame
-        local button = type(browse) == "table" and browse.RefreshButton or nil
-        if type(button) ~= "table" or type(button.Click) ~= "function" then
-            return false, "the finder's Browse tab is open, but its refresh button is not where it was"
+        local filter = browseFilter()
+        if filter then
+            local ok, why = self:SearchActivities(filter, "the finder's filter")
+            if not ok then
+                return false, why
+            end
+            self.stats.finderRefreshes = self.stats.finderRefreshes + 1
+            return true, "finder"
         end
-        local ok, err = pcall(button.Click, button)
-        if not ok then
-            return false, "the finder's refresh button would not take the click: " .. tostring(err)
-        end
-        self.stats.finderRefreshes = self.stats.finderRefreshes + 1
-        ns:Log("finder_refresh")
-        return true, "finder"
     end
     local ok, why = self:Search()
     if ok then
@@ -566,7 +608,7 @@ ns:RegisterCommand("lfg", "the people listed in the group finder for the picked 
     end
 end)
 
-ns:RegisterCommand("refresh", "refresh the group finder's list: its own refresh with its Browse tab open, a search for the picked dungeon otherwise", function()
+ns:RegisterCommand("refresh", "refresh the group finder's list: a search with the finder's own filter while its Browse tab is open, for the picked dungeon otherwise", function()
     local ok, how = LFG:Refresh()
     if ok then
         ns:Print(how == "finder" and "refreshed the group finder's list." or "asked the group finder for its list - the panel fills in when the answer comes.")

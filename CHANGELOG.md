@@ -13,7 +13,8 @@
   for the picked dungeon - people and groups alike - comes to the panel with roles, level, class, size and
   proximity - the channel's word for addon users, the listing's own area for the rest, a group's members
   counted up - sorted by proximity and role; the panel appears beside the finder window and closes with it,
-  with an X of its own; Refresh is the finder's own refresh, or a search of ours when the finder is closed.
+  with an X of its own; Refresh is a search of ours: the finder's own filter while its Browse tab is open (its own refresh button
+  is never clicked - from an addon, its search was blocked), the picked dungeon otherwise.
   The dungeon list is the finder's activity table, Forever's own instances included, the journal added where
   the client has one; sorted by level and coloured against yours as the finder does; groups and players
   listed apart, raids left out, an instance's wings (one map id, several names) as options of their own
