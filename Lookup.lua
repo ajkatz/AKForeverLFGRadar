@@ -75,7 +75,17 @@ function Lookup:Next()
 end
 
 -- the name to ask now, with the gaps honoured - or nil
+-- a /who only while the group finder's window is on the screen: you are looking at groups then, and at no
+-- other time (the user, 2026-11-10: "i only want it to run /who when the LFG window is up" - the finder's last
+-- search stays readable long after, and every key press kept asking about it)
+function Lookup:Paused()
+    return not (ns.LFG and ns.LFG.FinderOpen and ns.LFG:FinderOpen())
+end
+
 function Lookup:Due()
+    if self:Paused() then
+        return nil
+    end
     local now = GetTime()
     if self.pending and now - self.pending.at < PENDING_SECONDS then
         return nil
@@ -285,11 +295,11 @@ end)
 ns:On("PLAYER_REGEN_ENABLED", arm)
 
 function Lookup:Describe()
-    local waiting = 0
+    local waiting, paused = 0, self:Paused()
     for _, name in ipairs(self.queue) do
-        if stale(self.known[name]) then
+        if not paused and stale(self.known[name]) then
             waiting = waiting + 1
         end
     end
-    return { stats = self.stats, pending = self.pending, waiting = waiting, queue = self.queue, known = self.known, armed = armed }
+    return { stats = self.stats, pending = self.pending, waiting = waiting, queue = self.queue, known = self.known, armed = armed, paused = paused }
 end

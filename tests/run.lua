@@ -353,8 +353,21 @@ scenario("the group finder: people and groups listed for the picked dungeon come
     -- the unplaced members: a /who each - on the Refresh click, then on your key presses, ten seconds apart
     equal(ns.Lookup:Next(), "Marcus", "the first unplaced member is up for a /who")
     check(ns.Lookup.keys and ns.Lookup.keys.__keyboard and ns.Lookup.keys.__propagate, "the key rider hears every key and passes every key on")
+    Mock.keyPress("Q")
+    equal(#Mock.whoQueries, 0, "the finder's window closed: no /who, however many unplaced")
+    equal(ns.Lookup:Describe().paused, true)
+    Mock.openLFG()
+    LFGBrowseFrame:Hide() -- the finder open on another tab: a /who all the same
+    Mock.keyPress("E")
+    equal(#Mock.whoQueries, 1, "the finder's window open: the key press carried a /who")
+    equal(Mock.whoQueries[1], 'n-"Marcus"')
+    Mock.whoAnswer({}, 0)
+    ns.Lookup.known["Marcus"] = nil
+    ns.Lookup.stats.byChat, ns.Lookup.stats.viaKey = 0, 0 -- counted afresh from here
+    Mock.advance(10.5)
     Mock.click(AKForeverLFGRadarRefresh)
-    equal(#Mock.whoQueries, 1); equal(Mock.whoQueries[1], 'n-"Marcus"', "the click carried a /who for Marcus")
+    equal(#Mock.whoQueries, 2); equal(Mock.whoQueries[2], 'n-"Marcus"', "the click carried a /who for Marcus")
+    table.remove(Mock.whoQueries, 1)
     equal(Mock.whoToUi, false, "the answer is NOT asked to the UI: that opens the finder's Who tab")
     Mock.keyPress("W")
     equal(#Mock.whoQueries, 1, "one query on its way: nothing more until the answer")
@@ -386,6 +399,12 @@ scenario("the group finder: people and groups listed for the picked dungeon come
     equal(ns.Lookup.stats.viaClick, 1); equal(ns.Lookup.stats.viaKey, 2)
     equal(Mock.finderOpenedByWho, 0, "the finder never opened for a lookup")
     equal(#Mock.chatLines, 0, "no who line ever reached the chat")
+    -- the window closed again: Reginald's three minutes run out, and still no /who
+    Mock.closeLFG()
+    ns.Lookup.known["Reginald"].at = time() - 999 -- his three minutes are up
+    Mock.advance(11)
+    Mock.keyPress("D")
+    equal(#Mock.whoQueries, 3, "closed: nothing asked, though Reginald is due again")
     check(ns.Lookup.stats.filterInstalled, "the chat filter is in place")
     -- an action the client refuses is kept with the function's name; ours is said in the chat, another addon's is not
     Mock.fire("ADDON_ACTION_BLOCKED", ns.name, "Search")
@@ -688,6 +707,83 @@ scenario("the dungeon list follows the group finder: its activities name every i
     equal(ns.Dungeons:Find("thanes").journalID, 9002, "the same instance from both sources is one entry")
     equal(ns.Dungeons.list[#ns.Dungeons.list].name, "Grim Batol", "no level range known: last on the list")
     G.EJ_GetNumTiers, G.EJ_SelectTier, G.EJ_GetInstanceByIndex = nil, nil, nil
+end)
+
+scenario("your own group: with the finder's window closed no /who at all, in a party or not; open, the /who comes back; however long the finder's last search stays; short of a role, the listings that bring it come first - T/D/D/D puts healers on top, H/D/D/D tanks - from the roles the group assigned, else from your own listing", function()
+    local ns = start()
+    Mock.slash("show")
+    Mock.slash("deadmines")
+    Mock.moveTo("Westfall", 0.5, 0.5)
+    Mock.advance(4)
+    local size, roles = 5, { player = "TANK", party1 = "DAMAGER", party2 = "DAMAGER", party3 = "DAMAGER", party4 = "DAMAGER" }
+    _G.GetNumGroupMembers = function() return size end
+    _G.IsInRaid = function() return false end
+    _G.UnitGroupRolesAssigned = function(unit) return roles[unit] or "NONE" end
+    Mock.lfgResults({
+        { id = 1, leader = "Bolvar", activity = 1001, roles = "T", class = "WARRIOR", level = 22, area = "Elwynn Forest" },
+        { id = 2, leader = "Anduin", activity = 1001, roles = "H", class = "PRIEST", level = 20, area = "Elwynn Forest" },
+        { id = 3, leader = "Vanessa", activity = 1001, roles = "D", class = "ROGUE", level = 20, area = "Westfall" },
+        { id = 4, leader = "Garona", activity = 1001, roles = "H", class = "PRIEST", level = 23, area = "The Barrens" },
+        { id = 5, leader = "Mathias", activity = 1001, roles = "D", class = "ROGUE", level = 19 },
+    })
+    Mock.advance(0.5)
+    -- a full party: the search is still there, Mathias still unplaced, and no key press asks about him
+    equal(ns.LFG.listed[1].name, "Vanessa", "full: nothing wanted, proximity alone")
+    Mock.keyPress("W")
+    Mock.advance(11)
+    Mock.keyPress("S")
+    equal(#Mock.whoQueries, 0, "no /who with the finder closed")
+    local lookups = ns.Lookup:Describe()
+    equal(lookups.paused, true); equal(lookups.waiting, 0, "the panel says nothing is waiting")
+
+    -- somebody leaves: T/D/D/D - the healers to the top, nearest first among them; the /who comes back
+    size, roles.party4 = 4, nil
+    Mock.fire("GROUP_ROSTER_UPDATE")
+    Mock.advance(0.5)
+    local listed = ns.LFG.listed
+    equal(listed[1].name, "Anduin", "T/D/D/D: a healer on top")
+    equal(listed[2].name, "Garona", "the other healer, farther away, still above everyone else")
+    equal(listed[3].name, "Vanessa", "then proximity as ever")
+    check(listed[1].fills and listed[2].fills and not listed[3].fills)
+    equal(ns.LFG.own.source, "assigned")
+    Mock.keyPress("A")
+    equal(#Mock.whoQueries, 0, "a party of four, the finder closed: still no /who")
+    equal(ns.Lookup:Describe().paused, true)
+
+    -- H/D/D/D: the tank on top
+    roles.player = "HEALER"
+    Mock.fire("PLAYER_ROLES_ASSIGNED")
+    Mock.advance(0.5)
+    equal(ns.LFG.listed[1].name, "Bolvar", "H/D/D/D: a tank on top")
+    check(not ns.LFG.listed[2].fills, "only the tank fills what is missing")
+
+    -- nobody assigned roles: your own listing's members stand in (you tank, three dps listed with you)
+    roles = {}
+    Mock.lfgResults({
+        { id = 1, leader = "Bolvar", activity = 1001, roles = "T", class = "WARRIOR", level = 22, area = "Elwynn Forest" },
+        { id = 2, leader = "Anduin", activity = 1001, roles = "H", class = "PRIEST", level = 20, area = "Elwynn Forest" },
+        { id = 3, leader = "Vanessa", activity = 1001, roles = "D", class = "ROGUE", level = 20, area = "Westfall" },
+        { id = 9, leader = "Purrdee", activity = 1001, roles = "T", class = "SHAMAN", level = 22, area = "Westfall",
+            members = { { name = "Cookie", level = 20, class = "ROGUE", roles = "D" }, { name = "Sneed", level = 21, class = "WARRIOR", roles = "D" }, { name = "Drek", level = 21, class = "HUNTER", roles = "D" } } },
+    })
+    Mock.advance(0.5)
+    equal(ns.LFG.own and ns.LFG.own.source, "listing", "roles read from your own listing")
+    equal(ns.LFG.listed[1].name, "Anduin", "your listing says T/D/D/D: the healer on top")
+
+    -- the finder's window opened (in a party still): the /who rides on a key press once more
+    Mock.lfgResults({
+        { id = 5, leader = "Mathias", activity = 1001, roles = "D", class = "ROGUE", level = 19 },
+    })
+    Mock.advance(0.5)
+    Mock.openLFG()
+    LFGBrowseFrame:Hide()
+    Mock.advance(11)
+    Mock.keyPress("E")
+    equal(#Mock.whoQueries, 1, "the finder open: the /who is back")
+    equal(Mock.whoQueries[1], 'n-"Mathias"')
+    Mock.closeLFG()
+
+    _G.GetNumGroupMembers, _G.IsInRaid, _G.UnitGroupRolesAssigned = nil, nil, nil
 end)
 
 scenario("diagnostics and logout: the report is SavedVariables-safe and names the door's source; '/dr hide' and 'show'; the panel's place is remembered per character; '/dr reset' puts it back", function()

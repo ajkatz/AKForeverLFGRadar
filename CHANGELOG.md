@@ -1,5 +1,14 @@
 # AKForeverLFGRadar
 
+## 0.1.1
+
+- **A /who only while the group finder's window is open.** The finder's last search stays readable long after
+  you close it - after your group fills, too - and every key press kept asking where its unplaced members
+  were. Now the questions stop the moment the window closes and start again when you open it.
+- **What your group is short of comes first.** T/D/D/D puts the healers on top of the list, H/D/D/D the
+  tanks - nearest first among them, then everyone else by proximity as before. Roles come from the ones
+  the group assigned, else from your own listing in the finder.
+
 ## 0.1.0
 
 - **Named AKForeverLFGRadar** (AKForeverDungeonRadar while it was being built): `/lr`, or `/dr` as before.

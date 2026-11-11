@@ -284,8 +284,97 @@ local function aggregate(members)
     return { rank = rankSum / #members, yards = yards, text = text, short = short, rest = rest }, source
 end
 
+------------------------------------------------------------------------
+-- Your own group: full, or short of a role
+------------------------------------------------------------------------
+-- (the user, 2026-11-08: "it is running /who long after my group has filled"; "if my group makeup is
+-- T/D/D/D it should be prioritizing healers to the top of the list. same if its H/D/D/D")
+local PARTY_SIZE = 5
+local NEED = { TANK = 1, HEALER = 1, DAMAGER = 3 }
+local ROLE_KEY = { TANK = "tank", HEALER = "healer", DAMAGER = "dps" }
+
+local function groupSize()
+    local answer = ns.Readable(GetNumGroupMembers)
+    return answer and type(answer[1]) == "number" and answer[1] or 0
+end
+
+local function inRaid()
+    local answer = ns.Readable(IsInRaid)
+    return answer and answer[1] == true or false
+end
+
+-- a party of five: nobody left to find (a raid has room for more, so it never counts as full)
+function LFG:GroupFull()
+    return not inRaid() and groupSize() >= PARTY_SIZE
+end
+
+
+-- your group's roles: the roles the group assigned (UnitGroupRolesAssigned), else - nobody assigned any - your
+-- own listing's members as the finder's search has them. { counts, known, source } or nil
+local function ownRoles(ownMembers)
+    local counts, known = { TANK = 0, HEALER = 0, DAMAGER = 0 }, 0
+    if inRaid() then
+        return nil
+    end
+    local units = { "player" }
+    for index = 1, groupSize() - 1 do
+        units[#units + 1] = "party" .. index
+    end
+    for _, unit in ipairs(units) do
+        local answer = ns.Readable(UnitGroupRolesAssigned, unit)
+        local role = answer and answer[1]
+        if counts[role] then
+            counts[role], known = counts[role] + 1, known + 1
+        end
+    end
+    if known > 0 then
+        return { counts = counts, known = known, source = "assigned" }
+    end
+    for _, member in ipairs(ownMembers or {}) do
+        if counts[member.role] then
+            counts[member.role], known = counts[member.role] + 1, known + 1
+        end
+    end
+    return known > 0 and { counts = counts, known = known, source = "listing" } or nil
+end
+
+-- the roles your group is short of ({ tank = true, ... }), or nil: full, a raid, or no roles known
+local function wantedRoles(ownMembers)
+    if LFG:GroupFull() then
+        return nil
+    end
+    local own = ownRoles(ownMembers)
+    if not own then
+        return nil
+    end
+    local wanted, any = {}, false
+    for role, need in pairs(NEED) do
+        if own.counts[role] < need then
+            wanted[ROLE_KEY[role]], any = true, true
+        end
+    end
+    LFG.own = { counts = own.counts, source = own.source, wanted = any and wanted or nil }
+    return any and wanted or nil
+end
+
+local function fillsWanted(entry, wanted)
+    if not wanted or type(entry.roles) ~= "table" then
+        return false
+    end
+    for key in pairs(wanted) do
+        if entry.roles[key] then
+            return true
+        end
+    end
+    return false
+end
+
 function LFG:Build(reason)
     local list = api()
+    local me = ns.Readable(UnitName, "player")
+    me = me and me[1]
+    local ownMembers = nil
+    LFG.own = nil
     local dungeon = ns.Dungeons:Picked()
     local listed = {}
     if list and type(list.GetSearchResults) == "function" then
@@ -301,6 +390,11 @@ function LFG:Build(reason)
                     local size = plain(info.numMembers)
                     size = type(size) == "number" and size or 1
                     local members = membersOf(list, resultID, size)
+                    for _, member in ipairs(members) do
+                        if me and member.name == me then
+                            ownMembers = members -- your own listing: its roles stand in for unassigned ones
+                        end
+                    end
                     local leader = members[1] or { name = plain(info.leaderName), roles = {} }
                     local name = leader.name or plain(info.leaderName)
                     if type(name) == "string" and name ~= "" then
@@ -328,7 +422,15 @@ function LFG:Build(reason)
             end
         end
     end
+    -- the roles your group is short of come first (T/D/D/D: healers on top; H/D/D/D: tanks), then proximity
+    local wanted = wantedRoles(ownMembers)
+    for _, entry in ipairs(listed) do
+        entry.fills = fillsWanted(entry, wanted)
+    end
     table.sort(listed, function(a, b)
+        if a.fills ~= b.fills then
+            return a.fills
+        end
         if a.proximity.rank ~= b.proximity.rank then
             return a.proximity.rank < b.proximity.rank
         end
@@ -409,6 +511,12 @@ local function pickFromBrowse()
         ns:Log("pick_from_browse", only.key)
         ns.Dungeons:Pick(only)
     end
+end
+
+-- is the finder's window on the screen, any tab
+function LFG:FinderOpen()
+    local parent = _G.LFGParentFrame
+    return type(parent) == "table" and parent.IsShown ~= nil and (ns.Readable(parent.IsShown, parent) or {})[1] == true
 end
 
 -- is the finder's Browse tab on the screen (its own search stands then)
@@ -556,6 +664,13 @@ end
 for _, event in ipairs({ "LFG_LIST_SEARCH_RESULTS_RECEIVED", "LFG_LIST_SEARCH_RESULT_UPDATED" }) do
     ns:On(event, function()
         LFG.stats.lastResultsAt = GetTime()
+        buildSoon(event)
+    end)
+end
+
+-- the group changing changes what it is short of, and whether it is full
+for _, event in ipairs({ "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED" }) do
+    ns:On(event, function()
         buildSoon(event)
     end)
 end
