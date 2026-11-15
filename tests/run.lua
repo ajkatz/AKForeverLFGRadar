@@ -365,8 +365,12 @@ scenario("the group finder: people and groups listed for the picked dungeon come
     ns.Lookup.known["Marcus"] = nil
     ns.Lookup.stats.byChat, ns.Lookup.stats.viaKey = 0, 0 -- counted afresh from here
     Mock.advance(10.5)
+    local realRefresh = ns.LFG.Refresh
+    ns.LFG.Refresh = function() return false, "nothing to search" end
     Mock.click(AKForeverLFGRadarRefresh)
-    equal(#Mock.whoQueries, 2); equal(Mock.whoQueries[2], 'n-"Marcus"', "the click carried a /who for Marcus")
+    ns.LFG.Refresh = realRefresh
+    table.remove(Mock.chatLines) -- (the "no refresh" line)
+    equal(#Mock.whoQueries, 2); equal(Mock.whoQueries[2], 'n-"Marcus"', "no search went out: the click carried a /who for Marcus")
     table.remove(Mock.whoQueries, 1)
     equal(Mock.whoToUi, false, "the answer is NOT asked to the UI: that opens the finder's Who tab")
     Mock.keyPress("W")
@@ -383,6 +387,10 @@ scenario("the group finder: people and groups listed for the picked dungeon come
     Mock.keyPress("S")
     equal(#Mock.whoQueries, 1, "ten seconds between queries")
     Mock.advance(10)
+    local searched = #Mock.lfgSearches
+    Mock.click(AKForeverLFGRadarRefresh)
+    equal(#Mock.lfgSearches, searched + 1, "the click searched ...")
+    equal(#Mock.whoQueries, 1, "... and carried no /who with it: two restricted calls on one click, and the client blocks one")
     Mock.keyPress("W")
     equal(#Mock.whoQueries, 2); equal(Mock.whoQueries[2], 'n-"Reginald"', "the next one rides on a key press")
     Mock.keyPress("W") -- held down: a repeat within a second and a half is no press

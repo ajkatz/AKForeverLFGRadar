@@ -1,5 +1,13 @@
 # AKForeverLFGRadar
 
+## 0.1.2
+
+- **Fixed: "Interface action failed because of an AddOn" on Refresh.** A click on Refresh sent the group
+  finder's search and a /who for the next unplaced group member at the same moment; the client lets one such
+  call through per click and blocked the other. Now the click only searches, and the /who goes with your
+  next key press (it still rides the click when there is nothing to search).
+- The family's new icon.
+
 ## 0.1.1
 
 - **A /who only while the group finder's window is open.** The finder's last search stays readable long after

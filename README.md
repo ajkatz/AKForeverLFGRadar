@@ -77,7 +77,8 @@ into it:
   offer, on the one line.
 - **A /who for the rest.** A listing names an area for its leader only. For every other member nobody has
   placed, one who query by name rides on your next key press (the client allows the query on a key press or
-  a click only), ten seconds apart, and on the Refresh click. The answer is read from the chat path and
+  a click only), ten seconds apart - on the Refresh click only when that click has nothing to search, since
+  the client blocks a second such call on the same click. The answer is read from the chat path and
   swallowed there, since results sent to the UI would open the finder's Who tab every time. It holds for five
   minutes; a name the who does not find is left alone for three.
 

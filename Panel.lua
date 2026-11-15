@@ -642,12 +642,16 @@ local function create()
     refreshButton = CreateFrame("Button", "AKForeverLFGRadarRefresh", panel, "UIPanelButtonTemplate")
     refreshButton:SetSize(72, 20)
     refreshButton:SetText("Refresh")
+    -- ONE restricted call per click. The click used to send the search AND the next unplaced member's /who;
+    -- the client let one through and BLOCKED the other ("Interface action failed because of an AddOn";
+    -- ADDON_ACTION_BLOCKED "UNKNOWN()" in the 2026-11-13 report, the one moment both went out together).
+    -- So the /who rides the click only when no search went out; otherwise it waits for your next key press.
     refreshButton:SetScript("OnClick", function()
         local ok, why = ns.LFG:Refresh()
         if not ok then
             ns:Print("no refresh: " .. tostring(why))
+            ns.Lookup:Ask("click")
         end
-        ns.Lookup:Ask("click") -- a click is a key press too: the next unplaced member's /who goes with it
         Panel:RequestRefresh()
     end)
     refreshNote = dimLine(panel)
